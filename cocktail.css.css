@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="schmurdle.css">
+</head>
+<h1>SCHMURDLE</h1>
+<form accept-charset="UTF-8" id="schmurdleForm" action="#" onsubmit="getGuess()" autocomplete="off">
+    <label for="userGuess"> Guess a random five-lettered word! </label>
+    <input id="userGuess" name="userGuess" onkeyup="if (this.value.length > 0) document.getElementById('guess-submit').disabled = false; else document.getElementById('guess-submit').disabled = true;" />
+    <button type="submit" id="guess-submit" disabled="true">Submit Guess</button>
+    <br>
+    <button type="submit" id="game-mode" onclick="hardmode=true; gameStatus();">TURN ON HARDMODE!</button>
+    <button type="submit" id="game-mode" onclick="hardmode=false; gameStatus();">TURN OFF HARDMODE!</button>
+</form>
+
+<body>
+    <div id="mode-status"></div>
+    <div id="board"></div>
+    <div id="incorrect-letters">
+        Incorrect letters:
+    </div>
+</body>
+
+<script>
+    let numberOfGuesses = 6;
+    let letterValidator = [];
+    let prevLetterValidator = [];
+    let allGuessedWords = [];
+    let currentGuessArray = [];
+    let prevGuessArray = [];
+    let wrongLetters = [];
+    let incorrectLetters = [];
+    let correctLetters = [];
+    let onlyCorrectLetters = [];
+    let userValidGuess = "";
+    let prevValidGuess = "";
+    let j = 0;
+    let hardmode = false;
+    let form = document.getElementById("schmurdleForm");
+    let gamemode = document.getElementById("mode-status");
+    let wrongLetterUpdate = document.getElementById("incorrect-letters");
+
+    // gets guess submitted from user and validates if its in the word bank and that it is a 5 letter word
+    function getGuess() {
+        form.addEventListener('submit', handleForm);
+        if (!(numberOfGuesses > 0)) {
+            alert("Out of guesses!");
+            resetSession();
+            //location.reload();
+            return;
+        }
+        let userGuess = document.getElementById("userGuess").value.toLowerCase();
+        let validGuessChecker = false;
+        let callBack = function() {
+            if (this.responseText.search(userGuess) != -1) {
+                validGuessChecker = true;
+            }
+        }
+        getRequest(callBack);
+        if (!checkGuess(userGuess) || !validGuessChecker) {
+            console.log("Invalid guess!");
+            form = document.getElementById("schmurdleForm");
+            form.reset(); // will empty the submitted guess, more user friendly, makes it so you dont have to erase after every guess
+        } else {
+            console.log("Valid guess!");
+            numberOfGuesses--;
+            userValidGuess = userGuess;
+            currentGuessArray = userValidGuess.split('');
+            if (hardmode) {
+                if (hardmodeGuess()) {
+                    console.log("Invalid hardmode guess!");
+                    numberOfGuesses++;
+                    form = document.getElementById("schmurdleForm");
+                    form.reset();
+                    return;
+                }
+            }
+            let userRequest = "userGuess=" + userGuess;
+            let callBackPHP = function() {
+                console.log(this.responseText);
+                let wordArray = JSON.parse(this.responseText);
+                letterValidator = wordArray["letterCheckerArray"];
+                console.log(letterValidator);
+                for (let i = 0; i < letterValidator.length; i++) {
+                    if (letterValidator[i] == 2) {
+                        onlyCorrectLetters[i] = currentGuessArray[i];
+                    }
+                }
+                evaluateGuess();
+                prevLetterValidator = letterValidator;
+                prevValidGuess = userValidGuess;
+                prevGuessArray = userValidGuess.split('');
+                allGuessedWords[j] = userValidGuess;
+            }
+            sendRequest(userRequest, callBackPHP);
+            form = document.getElementById("schmurdleForm");
+            form.reset(); // will empty the submitted guess, more user friendly, makes it so you dont have to erase after every guess
+        }
+    }
+
+    // sees which letters are correct/incorrect/wrong and changes the boxes colors respectively 
+    function evaluateGuess() {
+        let winningGuess = true;
+        for (let i = 0; i < letterValidator.length; i++) {
+            if (letterValidator[i] != 2) {
+                winningGuess = false;
+            }
+            let child = document.getElementById("board").childNodes[j].childNodes[i];
+            if (letterValidator[i] == 2) {
+                child.style.backgroundColor = "green";
+                if (correctLetters.includes(currentGuessArray[i])) {} else if (incorrectLetters.includes(currentGuessArray[i])) {
+                    let index = incorrectLetters.indexOf(currentGuessArray[i]);
+                    if (index > -1) {
+                        incorrectLetters.splice(index, 1);
+                    }
+                    correctLetters.push(currentGuessArray[i]);
+                    console.log(correctLetters);
+                } else if (wrongLetters.includes(currentGuessArray[i])) {
+                    let index = wrongLetters.indexOf(currentGuessArray[i]);
+                    if (index > -1) {
+                        wrongLetters.splice(index, 1);
+                    }
+                    correctLetters.push(currentGuessArray[i]);
+                    console.log(correctLetters);
+                } else {
+                    correctLetters.push(currentGuessArray[i]);
+                    console.log(correctLetters);
+                }
+            } else if (letterValidator[i] == 1) {
+                child.style.backgroundColor = "#a17f1a";
+                if (correctLetters.includes(currentGuessArray[i]) || wrongLetters.includes(currentGuessArray[i]) || incorrectLetters.includes(currentGuessArray[i])) {} else {
+                    incorrectLetters.push(currentGuessArray[i]);
+                    console.log(incorrectLetters);
+                }
+            } else if (letterValidator[i] == 0) {
+                child.style.backgroundColor = "grey";
+                if (correctLetters.includes(currentGuessArray[i])) {
+                    let index = correctLetters.indexOf(currentGuessArray[i]);
+                    if (index > -1) {
+                        wrongLetters.splice(index, 1);
+                    }
+                } else if (incorrectLetters.includes(currentGuessArray[i]) || wrongLetters.includes(currentGuessArray[i])) {} else {
+                    wrongLetters.push(currentGuessArray[i]);
+                    console.log(wrongLetters);
+                }
+            }
+            child.innerHTML = userValidGuess[i];
+        }
+        wrongLetterUpdate.innerHTML = "Incorrect letters: " + wrongLetters;
+        console.log(prevLetterValidator + " " + allGuessedWords[j] + " " + letterValidator + " " + userValidGuess + " " + currentGuessArray + " " + j + " " + prevValidGuess + " " + " " + prevGuessArray);
+        j++;
+        if (winningGuess) {
+            alert("You have guessed the word!");
+            resetSession();
+            form = document.getElementById("schmurdleForm");
+            form.reset();
+            //location.reload();
+            return;
+        }
+    }
+
+    // checks for hardmode specific things for guesses
+    function hardmodeGuess() {
+        for (let i = 0; i < currentGuessArray.length; i++) {
+            if (userValidGuess === allGuessedWords[i]) {
+                return true;
+            }
+            if (onlyCorrectLetters[i] != null) {
+                if (onlyCorrectLetters[i] != currentGuessArray[i]) {
+                    return true;
+                }
+            }
+            for (let j = 0; j < wrongLetters.length; j++) {
+                if (currentGuessArray[i] == wrongLetters[j]) {
+                    return true;
+                }
+            }
+            for (let j = 0; j < incorrectLetters.length; j++) {
+                if (!currentGuessArray.includes(incorrectLetters[j])) {
+                    console.log(wrongLetters);
+                    console.log(incorrectLetters);
+                    console.log(correctLetters);
+                    return true;
+                }
+            }
+        }
+    }
+
+    // makes the wordle 6 rows with boxes for each letter
+    function makeBox() {
+        let board = document.getElementById("board"); // contains all the rows
+        for (let i = 0; i < 6; i++) {
+            let row = document.createElement("div");
+            row.className = "row";
+            for (let j = 0; j < 5; j++) {
+                let box = document.createElement("div");
+                box.className = "box";
+                row.appendChild(box); // adding the 5 boxes to the current row 
+            }
+            board.appendChild(row); // adding the row to the board 
+        }
+    }
+    makeBox();
+
+    // stops previous guesses from showing
+    function handleForm(event) {
+        event.preventDefault();
+    }
+
+    // shows the status of if its in hardmode or not 
+    function gameStatus() {
+        if (hardmode) {
+            gamemode.innerHTML = "Hardmode is on!";
+        } else {
+            gamemode.innerHTML = "Hardmode is off!";
+        }
+    }
+    gameStatus();
+
+    // makes sure its a 5 letter word
+    function checkGuess(guess) {
+        if (!(/^[a-zA-Z]+$/.test(guess)) || guess == null || guess.length != 5) {
+            return false;
+        } else {
+            return true;
+        }
+    }
+
+    // php form request
+    function sendRequest(request, callBackPHP) {
+        const xhttp = new XMLHttpRequest();
+        xhttp.onload = callBackPHP;
+        xhttp.open('POST', "schmurdle.php", true); // true for asynchronous, page may hang/stall when a guess is submitted if its synchronous
+        xhttp.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
+        xhttp.send(request);
+    }
+
+    // gets word bank
+    function getRequest(callBack) {
+        const xhttp = new XMLHttpRequest();
+        xhttp.onload = callBack;
+        xhttp.open('GET', "wordbank.txt", false); // asynchronous for now, ik its bad
+        xhttp.send();
+    }
+
+    // resets session
+    function resetSession() {
+        const xhttp = new XMLHttpRequest();
+        xhttp.open('POST', "reset.php", true); // true for asynchronous, page may hang/stall when a guess is submitted if its synchronous
+        xhttp.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
+        xhttp.send();
+    }
+
+</script>
+
+</html>
